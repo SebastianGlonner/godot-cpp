@@ -38,7 +38,7 @@ opts.Add(BoolVariable('generate_bindings', 'Generate GDNative API bindings', Fal
 
 unknown = opts.UnknownVariables()
 if unknown:
-    print "Unknown variables:", unknown.keys()
+    print ("Unknown variables:", unknown.keys())
     Exit(1)
 
 env = Environment()
@@ -133,4 +133,12 @@ add_sources(sources, 'src/gen', 'cpp')
 library = env.StaticLibrary(
     target='bin/' + 'libgodot-cpp.{}.{}.{}'.format(env['platform'], env['target'], env['bits']), source=sources
 )
+
+msvc = env.MSVSProject(target = 'Bar.vcxproj',
+    srcs = sources,
+    #incs = ["godot_headers", "include", "include/gen", "include/core"],
+    #buildTarget=library,
+    variant='Debug')
+
+Default(msvc)
 Default(library)
