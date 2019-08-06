@@ -1,12 +1,12 @@
 #!python
 
 import os, subprocess, platform, sys
+import pprint
 
-
-def add_sources(sources, dir, extension):
+def add_sources(env, sources, dir, extension):
   for f in os.listdir(dir):
       if f.endswith('.' + extension):
-          sources.append(dir + '/' + f)
+          sources.append(env.SharedObject(dir + '/' + f))
 
 # Try to detect the host platform automatically
 # This is used if no `platform` argument is passed
@@ -22,7 +22,7 @@ else:
 opts = Variables([], ARGUMENTS)
 
 opts.Add(EnumVariable('platform', 'Target platform', host_platform,
-                    allowed_values=('linux', 'osx', 'windows'),
+                    allowed_values=('linux', 'osx', 'windows', 'android'),
                     ignorecase=2))
 opts.Add(EnumVariable('bits', 'Target platform bits', 'default', ('default', '32', '64')))
 opts.Add(BoolVariable('use_llvm', 'Use the LLVM compiler - only effective when targeting Linux', False))
@@ -35,15 +35,30 @@ opts.Add(PathVariable('headers_dir', 'Path to the directory containing Godot hea
 opts.Add(BoolVariable('use_custom_api_file', 'Use a custom JSON API file', False))
 opts.Add(PathVariable('custom_api_file', 'Path to the custom JSON API file', None, PathVariable.PathIsFile))
 opts.Add(BoolVariable('generate_bindings', 'Generate GDNative API bindings', False))
+opts.Add('extra_suffix', "Custom extra suffix added to the base filename of all generated binary files", '')
+
+import build_android
+platform_opts = build_android.get_opts();
+
+for o in platform_opts:
+    opts.Add(o)
 
 unknown = opts.UnknownVariables()
 if unknown:
     print ("Unknown variables:", unknown.keys())
     Exit(1)
 
-env = Environment()
+custom_tools = ['default']
+platform_arg = ARGUMENTS.get("platform", ARGUMENTS.get("p", False))
+
+if os.name == "nt" and (platform_arg == "android" or ARGUMENTS.get("use_mingw", False)):
+    custom_tools = ['mingw']
+
+env = Environment(tools=custom_tools)
 opts.Update(env)
 Help(opts.GenerateHelpText(env))
+
+env.extra_suffix = ''
 
 # This makes sure to keep the session environment variables on Windows
 # This way, you can run SCons in a Visual Studio 2017 prompt and it will find all the required tools
@@ -107,6 +122,11 @@ elif env['platform'] == 'windows':
         env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
         env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++'])
 
+elif env['platform'] == 'android':
+
+    build_android.to_build_android(env)
+
+
 
 env.Append(CPPPATH=['.', env['headers_dir'], 'include', 'include/gen', 'include/core'])
 
@@ -127,18 +147,23 @@ if env['generate_bindings']:
 
 # source to compile
 sources = []
-add_sources(sources, 'src/core', 'cpp')
-add_sources(sources, 'src/gen', 'cpp')
+add_sources(env, sources, 'src/core', 'cpp')
+add_sources(env, sources, 'src/gen', 'cpp')
+
+file_suffix = env['bits']
+if env['platform'] == 'android':
+    file_suffix = 'a'
+
+if env.extra_suffix != '':
+    file_suffix = env.extra_suffix + '.' + file_suffix
+
+#myDict = env.Dictionary()
+#pp = pprint.PrettyPrinter()
+#pp.pprint(myDict)
+#sys.exit("exit")
 
 library = env.StaticLibrary(
-    target='bin/' + 'libgodot-cpp.{}.{}.{}'.format(env['platform'], env['target'], env['bits']), source=sources
+    target='bin/' + 'libgodot-cpp.{}.{}{}'.format(env['platform'], env['target'], file_suffix), source=sources
 )
 
-msvc = env.MSVSProject(target = 'Bar.vcxproj',
-    srcs = sources,
-    #incs = ["godot_headers", "include", "include/gen", "include/core"],
-    #buildTarget=library,
-    variant='Debug')
-
-Default(msvc)
 Default(library)
