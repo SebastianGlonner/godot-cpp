@@ -24,7 +24,7 @@ opts = Variables([], ARGUMENTS)
 opts.Add(EnumVariable('platform', 'Target platform', host_platform,
                     allowed_values=('linux', 'osx', 'windows', 'android'),
                     ignorecase=2))
-opts.Add(EnumVariable('bits', 'Target platform bits', 'default', ('default', '32', '64')))
+opts.Add(EnumVariable('bits', 'Target platform bits', '64', ('default', '32', '64')))
 opts.Add(BoolVariable('use_llvm', 'Use the LLVM compiler - only effective when targeting Linux', False))
 opts.Add(BoolVariable('use_mingw', 'Use the MinGW compiler - only effective on Windows', False))
 # Must be the same setting as used for cpp_bindings
@@ -54,20 +54,24 @@ platform_arg = ARGUMENTS.get("platform", ARGUMENTS.get("p", False))
 if os.name == "nt" and (platform_arg == "android" or ARGUMENTS.get("use_mingw", False)):
     custom_tools = ['mingw']
 
-env = Environment(tools=custom_tools)
+target_architecture = '';
+if ARGUMENTS.get("platform", '') == 'windows':
+    if ARGUMENTS.get("bits", '') == '64':
+        target_architecture ='amd64'
+    elif ARGUMENTS.get("bits", '') == '32':
+        target_architecture ='x86'
+
+if target_architecture != '' and not ARGUMENTS.get("use_mingw", False):
+    # This makes sure to keep the session environment variables on Windows
+    # This way, you can run SCons in a Visual Studio 2017 prompt and it will find all the required tools
+    env = Environment(TARGET_ARCH=target_architecture)
+else:
+    env = Environment(tools=custom_tools)
+
 opts.Update(env)
 Help(opts.GenerateHelpText(env))
 
 env.extra_suffix = ''
-
-# This makes sure to keep the session environment variables on Windows
-# This way, you can run SCons in a Visual Studio 2017 prompt and it will find all the required tools
-if env['platform'] == 'windows':
-    if env['bits'] == '64':
-        env = Environment(TARGET_ARCH='amd64')
-    elif env['bits'] == '32':
-        env = Environment(TARGET_ARCH='x86')
-    opts.Update(env)
 
 is64 = sys.maxsize > 2**32
 if env['bits'] == 'default':
@@ -114,10 +118,11 @@ elif env['platform'] == 'windows':
             env.Append(CCFLAGS=['/O2', '/EHsc', '/DNDEBUG', '/MD'])
     else:
         # MinGW
-        if env['bits'] == '64':
-            env['CXX'] = 'x86_64-w64-mingw32-g++'
-        elif env['bits'] == '32':
-            env['CXX'] = 'i686-w64-mingw32-g++'
+        # following commands does not exist in my environment, probably for linux cross compilation?
+        # if env['bits'] == '64':
+        #     env['CXX'] = 'x86_64-w64-mingw32-g++'
+        # elif env['bits'] == '32':
+        #     env['CXX'] = 'i686-w64-mingw32-g++'
 
         env.Append(CCFLAGS=['-g', '-O3', '-std=c++14', '-Wwrite-strings'])
         env.Append(LINKFLAGS=['--static', '-Wl,--no-undefined', '-static-libgcc', '-static-libstdc++'])
@@ -154,8 +159,8 @@ file_suffix = '.' + env['bits']
 if env['platform'] == 'android':
     file_suffix = '.a'
 
-if env.extra_suffix != '':
-    file_suffix = env.extra_suffix + file_suffix
+if env['extra_suffix'] != '':
+    file_suffix = env['extra_suffix'] + file_suffix
 
 #myDict = env.Dictionary()
 #pp = pprint.PrettyPrinter()
