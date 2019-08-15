@@ -150,12 +150,12 @@ sources = []
 add_sources(env, sources, 'src/core', 'cpp')
 add_sources(env, sources, 'src/gen', 'cpp')
 
-file_suffix = env['bits']
+file_suffix = '.' + env['bits']
 if env['platform'] == 'android':
-    file_suffix = 'a'
+    file_suffix = '.a'
 
 if env.extra_suffix != '':
-    file_suffix = env.extra_suffix + '.' + file_suffix
+    file_suffix = env.extra_suffix + file_suffix
 
 #myDict = env.Dictionary()
 #pp = pprint.PrettyPrinter()
